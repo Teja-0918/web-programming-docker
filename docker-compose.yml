@@ -1,0 +1,75 @@
+services:
+  # ==========================================
+  # 1. MongoDB Database Service
+  # ==========================================
+  mongo:
+    image: mongo:7.0
+    container_name: mernexus-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=mernexus
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - mernexus-net
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --eval 'db.adminCommand(\"ping\")' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ==========================================
+  # 2. Node.js Express API Backend Service
+  # ==========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mernexus-backend
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - MONGODB_URL=mongodb://mongo:27017/mernexus
+      - NODE_ENV=production
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - mernexus-net
+
+  # ==========================================
+  # 3. React / Vite Frontend SPA Service (Nginx)
+  # ==========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=http://localhost:4000
+    container_name: mernexus-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - mernexus-net
+
+# ==========================================
+# Isolated Container Network
+# ==========================================
+networks:
+  mernexus-net:
+    driver: bridge
+
+# ==========================================
+# Persistent Database Storage
+# ==========================================
+volumes:
+  mongo-data:
+    driver: local
